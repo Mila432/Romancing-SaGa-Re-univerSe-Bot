@@ -93,7 +93,7 @@ class API(object):
 		return self.callAPI('/status')
 
 	def player_create(self):
-		return self.callAPI('/player/create',{"nick_name":"ポルカ" if self.region==1 else "Rain","device_type":1})
+		return self.callAPI('/player/create',{"nick_name":"ポルカ","device_type":1} if self.region==1 else {"language":1,"lives_in_eea":True,"is_16_years_old_or_over":True,"country":"RU","nick_name":"Polka","device_type":1})
 
 	def player_summary(self):
 		return self.callAPI('/player/summary')
@@ -164,8 +164,8 @@ class API(object):
 	def present_box_list(self,_filter):
 		return self.callAPI('/present_box/list',{"filter":_filter})
 
-	def gacha_step_up_button_draw(self,gacha_step_up_button_id):
-		return self.callAPI('/gacha/step_up_button/draw',{"gacha_step_up_button_id":gacha_step_up_button_id})
+	def gacha_step_up_button_draw(self,gname,gid):
+		return self.callAPI('/gacha/%s/draw'%('button' if gname=='gacha_button_id' else'step_up_button'),{gname:gid})
 
 	def present_box_open(self,present_box_ids):
 		return self.callAPI('/present_box/open',{"present_box_ids":present_box_ids})
@@ -176,12 +176,12 @@ class API(object):
 				for i in j['gacha_buttons']:
 					if i['gacha_button']['required_quantity']==0:
 						self.log('id:%s'%(i['gacha_button']['gacha_button_id']))
-						self.gacha_step_up_button_draw(i['gacha_button']['gacha_button_id'])
+						self.gacha_step_up_button_draw('gacha_button_id',i['gacha_button']['gacha_button_id'])
 			if 'gacha_step_up_buttons' in j and j['gacha_step_up_buttons']:
 				for i in j['gacha_step_up_buttons']:
 					if i['required_quantity']==0:
 						self.log('id:%s'%(i['gacha_step_up_button_id']))
-						self.gacha_step_up_button_draw(i['gacha_step_up_button_id'])
+						self.gacha_step_up_button_draw('gacha_step_up_button_id',i['gacha_step_up_button_id'])
 
 	def login(self):
 		self.s.headers.update({'Content-Type':'application/json','X-Mikoto-Request-Id':'7f33bd72-f490-4938-a215-db093ff009de','X-Mikoto-Client-Version':self.version,'X-Mikoto-Platform':self.platform,'X-Mikoto-Device-Secret':self.secret,'X-Mikoto-Device-UUID':self.udid,'X-Mikoto-Device-Model':'iPad7,5 iOS 13.3.1','Connection':'TE','TE':'identity','User-Agent':'BestHTTP'})
@@ -199,14 +199,26 @@ class API(object):
 		skills={}
 		e=self.quest_create(quest_id)
 		enemies=[]
-		for t in e['created_quest']['battle']['enemies']:
-			if t['hp']==0:	continue
-			enemies.append(t['member_id'])
-		for t in e['created_quest']['battle']['allies']:
-			if t['member_id'] not in skills:
-				skills[t['member_id']]=set()
-			for s in t['skills']:
-				skills[t['member_id']].add(s['skill_id'])
+		if 'created_quest' in e:
+			for t in e['created_quest']['battle']['enemies']:
+				if t['hp']==0:	continue
+				enemies.append(t['member_id'])
+		if 'battle' in e:
+			for t in e['battle']['enemies']:
+				if t['hp']==0:	continue
+				enemies.append(t['member_id'])
+		if 'created_quest' in e:
+			for t in e['created_quest']['battle']['allies']:
+				if t['member_id'] not in skills:
+					skills[t['member_id']]=set()
+				for s in t['skills']:
+					skills[t['member_id']].add(s['skill_id'])
+		if 'battle' in e:
+			for t in e['battle']['allies']:
+				if t['member_id'] not in skills:
+					skills[t['member_id']]=set()
+				for s in t['skills']:
+					skills[t['member_id']].add(s['skill_id'])
 		while(1):
 			rndid=min(enemies)
 			time.sleep(randrange(5))
@@ -225,18 +237,19 @@ class API(object):
 						enemies.append(t['member_id'])
 				if r['battle_result']['status']=='win':
 					j=self.quest_status()
-					for t in j['created_quest']['battle']['allies']:
+					battle=j['created_quest']['battle'] if 'created_quest' in j else j['battle']
+					for t in battle['allies']:
 						if t['member_id'] not in skills:
 							skills[t['member_id']]=set()
 						for s in t['skills']:
 							skills[t['member_id']].add(s['skill_id'])
 					enemies=[]
-					for t in j['created_quest']['battle']['enemies']:
+					for t in battle['enemies']:
 						if t['hp']==0:	continue
 						enemies.append(t['member_id'])
 					if 91 in enemies:
 						enemies=[91]
-					if j['created_quest']['battle']['final_round']<j['created_quest']['battle']['round']:
+					if battle['final_round']<battle['round']:
 						self.log('quest finished')
 						return
 				if r['battle_result']['status']=='complete':
